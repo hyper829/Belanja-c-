@@ -1,32 +1,57 @@
-# Prerequisites
-*.d
+#include <iostream>
+#include <curl/curl.h>
+#include <libxml/HTMLparser.h>
+#include <libxml/xpath.h>
 
-# Compiled Object files
-*.slo
-*.lo
-*.o
-*.obj
+// Fungsi callback untuk menangani data yang diterima dari permintaan HTTP
+size_t WriteCallback(void *contents, size_t size, size_t nmemb, std::string *output) {
+    size_t total_size = size * nmemb;
+    output->append(static_cast<char*>(contents), total_size);
+    return total_size;
+}
 
-# Precompiled Headers
-*.gch
-*.pch
+int main() {
+    // Inisialisasi libcurl
+    CURL *curl = curl_easy_init();
+    if (curl) {
+        // Set URL untuk pencarian di Google
+        std::string url = "https://www.google.com/search?q=c++ programming";
+        curl_easy_setopt(curl, CURLOPT_URL, url.c_str());
 
-# Compiled Dynamic libraries
-*.so
-*.dylib
-*.dll
+        // Callback untuk menulis hasil pencarian ke string
+        std::string response;
+        curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, WriteCallback);
+        curl_easy_setopt(curl, CURLOPT_WRITEDATA, &response);
 
-# Fortran module files
-*.mod
-*.smod
+        // Melakukan permintaan HTTP
+        CURLcode res = curl_easy_perform(curl);
+        if (res == CURLE_OK) {
+            // Mengurai HTML menggunakan libxml2
+            xmlDocPtr doc = htmlReadMemory(response.c_str(), response.size(), NULL, NULL, HTML_PARSE_RECOVER | HTML_PARSE_NOERROR | HTML_PARSE_NOWARNING);
+            if (doc) {
+                // Gunakan XPath untuk mengekstrak hasil pencarian
+                xmlXPathContextPtr context = xmlXPathNewContext(doc);
+                if (context) {
+                    xmlXPathObjectPtr result = xmlXPathEvalExpression(reinterpret_cast<const xmlChar*>("//h3"), context);
+                    if (result) {
+                        xmlNodeSetPtr nodes = result->nodesetval;
+                        for (int i = 0; i < nodes->nodeNr; ++i) {
+                            xmlNodePtr node = nodes->nodeTab[i];
+                            xmlChar *content = xmlNodeGetContent(node);
+                            std::cout << "Hasil " << i + 1 << ": " << content << std::endl;
+                            xmlFree(content);
+                        }
+                        xmlXPathFreeObject(result);
+                    }
+                    xmlXPathFreeContext(context);
+                }
+                xmlFreeDoc(doc);
+            }
+        }
 
-# Compiled Static libraries
-*.lai
-*.la
-*.a
-*.lib
+        // Bersihkan libcurl
+        curl_easy_cleanup(curl);
+    }
 
-# Executables
-*.exe
-*.out
-*.app
+    return 0;
+}
